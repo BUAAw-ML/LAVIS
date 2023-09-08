@@ -32,15 +32,16 @@ from lavis.models.blip_models.blip_retrieval import BlipRetrieval
 from lavis.models.blip_models.blip_vqa import BlipVQA
 
 from lavis.models.blip2_models.blip2 import Blip2Base
+# from lavis.models.blip2_models.blip2_zh import Blip2Base_zh
 from lavis.models.blip2_models.blip2_opt import Blip2OPT
 from lavis.models.blip2_models.blip2_t5 import Blip2T5
 from lavis.models.blip2_models.blip2_qformer import Blip2Qformer
+# from lavis.models.blip2_models.blip2_qformer_zh import Blip2Qformer_zh
+# from lavis.models.blip2_models.blip2_retrieval_zh import Blip2Retrieval_zh
 from lavis.models.blip2_models.blip2_image_text_matching import Blip2ITM
+# from lavis.models.blip2_models.blip2_classify_zh import Blip2Classify_zh
 
-from lavis.models.blip2_models.blip2_t5_instruct import Blip2T5Instruct
-from lavis.models.blip2_models.blip2_vicuna_instruct import Blip2VicunaInstruct
-
-from lavis.models.blip_diffusion_models.blip_diffusion import BlipDiffusion
+from lavis.models.blip2_models.blip2_vicuna_instruct_okvqa import Blip2VicunaInstruct
 
 from lavis.models.pnp_vqa_models.pnp_vqa import PNPVQA
 from lavis.models.pnp_vqa_models.pnp_unifiedqav2_fid import PNPUnifiedQAv2FiD
@@ -53,6 +54,12 @@ from lavis.models.gpt_models.gpt_dialogue import GPTDialogue
 
 from lavis.processors.base_processor import BaseProcessor
 
+# from lavis.models.blip2_video.blip2_video_qformer import Blip2VideoStage1
+# from lavis.models.blip2_video.blip2_bloomz import Blip2Bloomz
+
+# from lavis.models.alignment.vip_qformer_alignment import VipQFormerAlignment
+# from lavis.models.alignment.clip_vip_qformer import CLIPVipQFormer
+# from lavis.models.alignment.chinese_clip import ChineseClip
 
 __all__ = [
     "load_model",
@@ -69,7 +76,6 @@ __all__ = [
     "BlipFeatureExtractor",
     "BlipCaption",
     "BlipClassification",
-    "BlipDiffusion",
     "BlipITM",
     "BlipNLVR",
     "BlipPretrain",
@@ -77,10 +83,12 @@ __all__ = [
     "BlipVQA",
     "Blip2Qformer",
     "Blip2Base",
+    # "Blip2Qformer_zh",
+    # "Blip2Retrieval_zh",
+    # "Blip2Base_zh",
     "Blip2ITM",
     "Blip2OPT",
     "Blip2T5",
-    "Blip2T5Instruct",
     "Blip2VicunaInstruct",
     "PNPVQA",
     "Img2PromptVQA",
@@ -89,6 +97,12 @@ __all__ = [
     "VisionTransformerEncoder",
     "XBertLMHeadDecoder",
     "GPTDialogue",
+    # "Blip2Classify_zh"
+#     "Blip2VideoStage1",
+#     "Blip2Bloomz",
+#     "VipQFormerAlignment",
+#     "CLIPVipQFormer",
+#     "ChineseClip",
 ]
 
 

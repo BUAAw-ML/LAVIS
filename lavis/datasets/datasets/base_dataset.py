@@ -25,9 +25,10 @@ class BaseDataset(Dataset):
         self.annotation = []
         for ann_path in ann_paths:
             self.annotation.extend(json.load(open(ann_path, "r")))
-
+        self.annotation=self.annotation[:8]
         self.vis_processor = vis_processor
         self.text_processor = text_processor
+
 
         self._add_instance_ids()
 

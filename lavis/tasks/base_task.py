@@ -50,6 +50,7 @@ class BaseTask:
 
         assert len(datasets_config) > 0, "At least one dataset has to be specified."
 
+
         for name in datasets_config:
             dataset_config = datasets_config[name]
 
@@ -70,9 +71,6 @@ class BaseTask:
 
     def valid_step(self, model, samples):
         raise NotImplementedError
-    
-    def before_training(self, model, dataset, **kwargs):
-        model.before_training(dataset=dataset, task_type=type(self))
 
     def before_evaluation(self, model, dataset, **kwargs):
         model.before_evaluation(dataset=dataset, task_type=type(self))

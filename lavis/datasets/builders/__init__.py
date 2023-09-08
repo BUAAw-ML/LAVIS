@@ -17,10 +17,13 @@ from lavis.datasets.builders.image_text_pair_builder import (
     ConceptualCaption3MBuilder,
     VGCaptionBuilder,
     SBUCaptionBuilder,
+    # VideoClipBuilder,
+    # WukongBuilder,
 )
 from lavis.datasets.builders.classification_builder import (
     NLVRBuilder,
     SNLIVisualEntailmentBuilder,
+    # Industry5MBuilder,
 )
 from lavis.datasets.builders.imagefolder_builder import ImageNetBuilder
 from lavis.datasets.builders.video_qa_builder import MSRVTTQABuilder, MSVDQABuilder
@@ -29,27 +32,37 @@ from lavis.datasets.builders.vqa_builder import (
     OKVQABuilder,
     VGVQABuilder,
     GQABuilder,
+    # INSTRUCTBuilder,
 )
 from lavis.datasets.builders.retrieval_builder import (
     MSRVTTRetrievalBuilder,
     DiDeMoRetrievalBuilder,
     COCORetrievalBuilder,
+    # COCOCNRetrievalBuilder,
+    # Flickr30kCNBuilder,
+    # Flickr8kCNBuilder,
     Flickr30kBuilder,
+    # MugeBuilder,
 )
 from lavis.datasets.builders.dialogue_builder import AVSDDialBuilder
-from lavis.datasets.builders.text_to_image_generation_builder import BlipDiffusionFinetuneBuilder
+# from lavis.datasets.builders.video_text_pair_builder import VideoClipBuilder
+# from lavis.datasets.builders.video_tags_generation_builder import VideoTagsGenerationBuilder
+# from lavis.datasets.builders.video_text_alignment_builder import VideoTextAlignmentBuilder
 
 from lavis.common.registry import registry
 
 __all__ = [
-    "BlipDiffusionFinetuneBuilder",
     "COCOCapBuilder",
     "COCORetrievalBuilder",
+    # "COCOCNRetrievalBuilder",
     "COCOVQABuilder",
     "ConceptualCaption12MBuilder",
     "ConceptualCaption3MBuilder",
     "DiDeMoRetrievalBuilder",
     "Flickr30kBuilder",
+    # "Flickr30kCNBuilder",
+    # "Flickr8kCNBuilder",
+    # "MugeBuilder",
     "GQABuilder",
     "ImageNetBuilder",
     "MSRVTTCapBuilder",
@@ -59,12 +72,19 @@ __all__ = [
     "MSVDQABuilder",
     "NLVRBuilder",
     "OKVQABuilder",
+    # "INSTRUCTBuilder",
     "SBUCaptionBuilder",
     "SNLIVisualEntailmentBuilder",
     "VATEXCapBuilder",
     "VGCaptionBuilder",
     "VGVQABuilder",
     "AVSDDialBuilder",
+    # "VideoClipBuilder",
+    # "VideoTextPairBuilder",
+#     "VideoTagsGenerationBuilder",
+    # "VideoTextAlignmentBuilder",
+    # "WukongBuilder",
+    # "Industry5MBuilder",
 ]
 
 
