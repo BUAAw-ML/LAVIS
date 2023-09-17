@@ -105,3 +105,53 @@ def retriever_data(file_path, model_name, output_filename, top_k=5,
 
 
 #     retriever_data(f'indatasets/{args.dataset}/{args.split}.json', args.model_name, f'outdatasets/{args.dataset}/{args.split}.json', args.top_k)
+
+
+def TextBasedVisionInput(self, sample: EasyDict, module: EasyDict) -> Optional[EasyDict]:
+    """
+    Default TextBasedVisionInput module parser
+    object: text-based objects, with attributes and OCR'ed texts
+    caption: iamge captions
+    """
+    return_dict = EasyDict(
+        text_sequence="",
+    )
+
+    # Input from Vision
+    vision_sentences = []
+    if module.option == 'object':
+        vision_sentences += [module.separation_tokens.start]
+        for obj in sample.objects:
+            attribute_max = module.get('attribute_max', 0)
+            if attribute_max > 0:
+                # find suitable attributes
+                suitable_attributes = []
+                for attribute, att_score in zip(obj['attributes'], obj['attribute_scores']):
+                    if att_score > module.attribute_thres and len(suitable_attributes) < attribute_max:
+                        suitable_attributes.append(attribute)
+                # append to the sentence
+                vision_sentences += suitable_attributes
+            vision_sentences.append(obj['class'])
+            vision_sentences.append(module.separation_tokens.sep)
+        
+        ocr = module.get('ocr', 0)
+        if ocr > 0:
+            text_annotations = sample.img_ocr
+            filtered_descriptions = []
+            for text_annoation in text_annotations:
+                description = text_annoation['description'].strip()
+                description = description.replace('\n', " ") # remove line switching
+                # vision_sentences += [description]
+                # print('OCR feature:', description)
+                if description not in filtered_descriptions:
+                    filtered_descriptions.append(description)
+            # print('OCR feature:', filtered_descriptions)
+            vision_sentences += filtered_descriptions
+
+        vision_sentences += [module.separation_tokens.end]
+        return_dict.text_sequence = ' '.join(vision_sentences)
+    
+    elif module.option == 'caption':
+        return_dict.text_sequence = ' '.join([module.separation_tokens.start] + [sample.img_caption['caption']] + [module.separation_tokens.end])
+        
+    return return_dict

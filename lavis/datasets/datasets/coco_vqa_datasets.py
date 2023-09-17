@@ -103,7 +103,8 @@ class OKVQADataset(VQADataset, __DisplMixin):
         image = self.vis_processor(image)
         question = self.text_processor(ann["question"])
 
-        passages = "" #ann["passages"]
+        passages = ann["passages"]
+ 
 
         answer_weight = {}
         for answer in ann["answer"]:

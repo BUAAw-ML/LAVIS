@@ -27,6 +27,7 @@ datasets:
 #        name: "blip_question"
 #      eval:
 #        name: "blip_question"
+
   ok_vqa: # name of the dataset builder
     vis_processor:
         train:
@@ -40,19 +41,20 @@ datasets:
           name: "blip_question"
         eval:
           name: "blip_question"
-#  aok_vqa:
-#    vis_processor:
-#      train:
-#        name: "blip_image_train"
-#        image_size: 224
-#      eval:
-#        name: "blip_image_eval"
-#        image_size: 224
-#    text_processor:
-#      train:
-#        name: "blip_question"
-#      eval:
-#        name: "blip_question"
+
+  # aok_vqa:
+  #   vis_processor:
+  #     train:
+  #       name: "blip_image_train"
+  #       image_size: 224
+  #     eval:
+  #       name: "blip_image_eval"
+  #       image_size: 224
+  #   text_processor:
+  #     train:
+  #       name: "blip_question"
+  #     eval:
+  #       name: "blip_question"
 
 run:
   task: vqa

@@ -160,6 +160,10 @@ class Blip2VicunaInstruct(Blip2Base):
         # samples["text_input"] = text_input
         # if "rationale" in samples.keys():
         #     samples['gold_answer'] = [samples['gold_answer'][i] + "This is because " + samples["rationale"][i][0] for i in range(image.size(0))]
+        
+        for i in range(len(samples["text_input"])):
+             samples["text_input"][i] = samples["text_input"][i]+"#"+samples["passages"][i]
+        
         if self.qformer_text_input:
             text_Qformer = self.tokenizer(
                 samples["text_input"],
