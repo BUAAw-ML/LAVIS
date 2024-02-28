@@ -9,9 +9,16 @@ import argparse
 import os
 import random
 
+# os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
+ 
+
 import numpy as np
 import torch
 import torch.backends.cudnn as cudnn
+
+# torch.cuda.device_count()
 
 import lavis.tasks as tasks
 from lavis.common.config import Config
@@ -36,6 +43,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Training")
 
     parser.add_argument("--cfg-path", required=True, help="path to configuration file.")
+    # parser.add_argument("--local_rank", type=int, required=True, help="path to configuration file.")
     parser.add_argument(
         "--options",
         nargs="+",
@@ -77,6 +85,7 @@ def main():
 
     # set before init_distributed_mode() to ensure the same job_id shared across all ranks.
     job_id = now()
+
 
     cfg = Config(parse_args())
 

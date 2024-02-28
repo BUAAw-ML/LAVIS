@@ -35,6 +35,27 @@ class AOKVQADataset(VQADataset, __DisplMixin):
     def __init__(self, vis_processor, text_processor, vis_root, ann_paths):
         super().__init__(vis_processor, text_processor, vis_root, ann_paths)
 
+    def collater(self, samples):
+        (
+            image_list,
+            question_list,
+            gold_answer,
+            passages_list
+        ) = ([], [], [], [])
+
+        for sample in samples:
+            image_list.append(sample["image"])
+            question_list.append(sample["text_input"])
+            gold_answer.append(sample["answer"])
+            passages_list.append(sample["passages"])
+
+        return {
+            "image": torch.stack(image_list, dim=0),
+            "text_input": question_list,
+            "gold_answer": gold_answer,
+            "passages": passages_list,
+        }
+
     def __getitem__(self, index):
         ann = self.annotation[index]
 
@@ -55,12 +76,22 @@ class AOKVQADataset(VQADataset, __DisplMixin):
 
         answers = list(answer_weight.keys())
         weights = list(answer_weight.values())
+        answer = answers[weights.index(max(weights))]
+
+
+        passenges_buf=''
+        for passenge in ann["rationales"]:
+            passenges_buf += (passenge + "#")
+        passages = passenges_buf[:-1]
+        
 
         return {
             "image": image,
             "text_input": question,
             "answers": answers,
             "weights": weights,
+            "passages": passages,
+            "answer": answer,
         }
 
 
@@ -102,7 +133,8 @@ class AOKVQAEvalDataset(VQAEvalDataset, __DisplMixin):
             choices_list,
             correct_choice_idx_list,
             direct_answers_list,
-        ) = ([], [], [], [], [], [], [])
+            passages_list,
+        ) = ([], [], [], [], [], [], [], [])
 
         for sample in samples:
             image_list.append(sample["image"])
@@ -112,6 +144,8 @@ class AOKVQAEvalDataset(VQAEvalDataset, __DisplMixin):
             choices_list.append(sample["choices"])
             correct_choice_idx_list.append(sample["correct_choice_idx"])
             direct_answers_list.append(sample["direct_answers"])
+            passages_list.append(sample["passages"])
+            
 
         return {
             "image": torch.stack(image_list, dim=0),
@@ -121,6 +155,7 @@ class AOKVQAEvalDataset(VQAEvalDataset, __DisplMixin):
             "choices": choices_list,
             "correct_choice_idx": correct_choice_idx_list,
             "direct_answers": direct_answers_list,
+            "passages": passages_list,
         }
 
     def __getitem__(self, index):
@@ -142,6 +177,11 @@ class AOKVQAEvalDataset(VQAEvalDataset, __DisplMixin):
             direct_answers = ann["direct_answers"]
         else:
             direct_answers = None
+        
+        passenges_buf=''
+        for passenge in ann["rationales"]:
+            passenges_buf += (passenge + "#")
+        passages = passenges_buf[:-1]
 
         return {
             "image": image,
@@ -151,4 +191,5 @@ class AOKVQAEvalDataset(VQAEvalDataset, __DisplMixin):
             "choices": choices,
             "correct_choice_idx": correct_choice_idx,
             "direct_answers": direct_answers,
+            "passages": passages,
         }

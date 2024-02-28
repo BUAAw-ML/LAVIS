@@ -226,6 +226,10 @@ class BaseTask:
             else:
                 loss.backward()
 
+            # for name, param in model.named_parameters():
+            #     if param.grad is None:
+            #         print(name) 
+
             # update gradients every accum_grad_iters iterations
             if (i + 1) % accum_grad_iters == 0:
                 if use_amp:

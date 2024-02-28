@@ -27,6 +27,10 @@ from transformers import BertTokenizer
 
 
 class Blip2Base(BaseModel):
+    PRETRAINED_MODEL_CONFIG_DICT = {
+        "blip2_t5_okvqa": "configs/models/blip2/blip2_pretrain_flant5xl.yaml",
+
+    }
     @classmethod
     def init_tokenizer(cls, truncation_side="right"):
         tokenizer = BertTokenizer.from_pretrained("/mnt/data/qbwang/public/models--bert-base-uncased", cache_dir="/mnt/data/qbwang/public", truncation_side=truncation_side)
@@ -52,12 +56,83 @@ class Blip2Base(BaseModel):
         encoder_config.cross_attention_freq = cross_attention_freq
         encoder_config.query_length = num_query_token
         Qformer = BertLMHeadModel.from_pretrained(
-            "bert-base-uncased", config=encoder_config
+            "/mnt/data/qbwang/public/models--bert-base-uncased", config=encoder_config
         )
         query_tokens = nn.Parameter(
             torch.zeros(1, num_query_token, encoder_config.hidden_size)
         )
         query_tokens.data.normal_(mean=0.0, std=encoder_config.initializer_range)
+
+
+        return Qformer, query_tokens
+
+    @classmethod
+    def init_Qformer2(cls, num_query_token, vision_width, cross_attention_freq=2):
+        
+        encoder_config = BertConfig.from_pretrained("/mnt/data/qbwang/public/models--bert-base-uncased")
+        encoder_config.encoder_width = vision_width
+        # insert cross-attention layer every other block
+        encoder_config.add_cross_attention = True
+
+        encoder_config.cross_attention_freq = cross_attention_freq
+        encoder_config.query_length = num_query_token
+
+        
+        Qformer = BertLMHeadModel.from_pretrained(
+            "/mnt/data/qbwang/public/models--bert-base-uncased", config=encoder_config
+        )
+
+        query_tokens = nn.Parameter(
+            torch.zeros(1, num_query_token, encoder_config.hidden_size)
+        )
+        query_tokens.data.normal_(mean=0.0, std=encoder_config.initializer_range)
+        
+        return Qformer, query_tokens
+
+    @classmethod
+    def init_Qformer3(cls, num_query_token, vision_width, cross_attention_freq=2):
+        
+        encoder_config = BertConfig.from_pretrained("/mnt/data/qbwang/public/models--bert-base-uncased")
+        encoder_config.encoder_width = vision_width
+        # insert cross-attention layer every other block
+        encoder_config.add_cross_attention = True
+
+        encoder_config.cross_attention_freq = cross_attention_freq
+        encoder_config.query_length = num_query_token
+
+        
+        Qformer = BertLMHeadModel.from_pretrained(
+            "/mnt/data/qbwang/public/models--bert-base-uncased", config=encoder_config
+        )
+
+        query_tokens = nn.Parameter(
+            torch.zeros(1, num_query_token, encoder_config.hidden_size)
+        )
+        query_tokens.data.normal_(mean=0.0, std=encoder_config.initializer_range)
+        
+        return Qformer, query_tokens
+
+    @classmethod
+    def init_Qformer4(cls, num_query_token, vision_width, cross_attention_freq=2):
+        
+        encoder_config = BertConfig.from_pretrained("/mnt/data/qbwang/public/models--bert-base-uncased")
+        encoder_config.encoder_width = vision_width
+        # insert cross-attention layer every other block
+        encoder_config.add_cross_attention = True
+
+        encoder_config.cross_attention_freq = cross_attention_freq
+        encoder_config.query_length = num_query_token
+
+        
+        Qformer = BertLMHeadModel.from_pretrained(
+            "/mnt/data/qbwang/public/models--bert-base-uncased", config=encoder_config
+        )
+
+        query_tokens = nn.Parameter(
+            torch.zeros(1, num_query_token, encoder_config.hidden_size)
+        )
+        query_tokens.data.normal_(mean=0.0, std=encoder_config.initializer_range)
+        
         return Qformer, query_tokens
 
     def init_vision_encoder(

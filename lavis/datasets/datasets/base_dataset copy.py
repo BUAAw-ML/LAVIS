@@ -122,22 +122,10 @@ class BaseDataset(Dataset):
         ann_root (string): directory to store the annotation file
         """
         self.vis_root = vis_root
-        # print(ann_paths)
+
         self.annotation = []
-
-#############################################################
-        self.annotation = json.load(open(ann_paths[0]))
-
-        self.vis_processor = vis_processor
-        self.text_processor = text_processor
-
-        self._add_instance_ids()
-
-        if 'aokvqa' in ann_paths[0]:
-            return
-
-        # for ann_path in ann_paths:
-        #     self.annotation.extend(json.load(open(ann_path, "r")))
+        for ann_path in ann_paths:
+            self.annotation.extend(json.load(open(ann_path, "r")))
         
         # self.annotation = self.annotation[:100]
  
@@ -167,8 +155,7 @@ class BaseDataset(Dataset):
         # print(len(vinvl_features.keys()))
         #output_filename = "retriever.json"
 
-        retrieve_knowledge = json.load(open("trainRetriever10.json", "r")) #retriever10_que+imgdes.json retriever10
-        # experience_data = json.load(open("experience_vqav2.json", "r"))
+        retrieve_knowledge = json.load(open("retriever10.json", "r"))
 
         for idx, item in enumerate(self.annotation):
             
@@ -188,23 +175,19 @@ class BaseDataset(Dataset):
             # retrieve_knowledge
             # print(retrieve_knowledge[str(item['question_id'])])
             self.annotation[idx]['passages'] = retrieve_knowledge[str(item['question_id'])]#.split("#")[0]
-            # if str(int(image_id)) in experience_data.keys():
-            #     # print(experience_data[str(int(image_id))])
-            #     self.annotation[idx]['experiences'] = experience_data[str(int(image_id))]
-            # else:
-            #     self.annotation[idx]['experiences'] = description
             # print(self.annotation[idx]['passages'])
-        
+            # exit()
+
             self.annotation[idx]['img_description'] = description
-        
 
-        # self.retriever_data(self.annotation)
-
-        # self.obtain_experience_data(self.annotation, json.load(open(ann_paths[-2])), json.load(open(ann_paths[-1])))
+        # self.retriever_data()
 
         # self.annotation=self.annotation#[:8]
+        self.vis_processor = vis_processor
+        self.text_processor = text_processor
 
-        
+        self._add_instance_ids()
+
 
     def __len__(self):
         return len(self.annotation)
@@ -220,9 +203,9 @@ class BaseDataset(Dataset):
         for idx, ann in enumerate(self.annotation):
             ann[key] = str(idx)
 
-    def retriever_data(self, annotation, model_name='gtr-t5-large', output_filename='/mnt/data/qbwang/lavis/data', top_k=10,
+    def retriever_data(self, annotation, model_name='gtr-t5-large', output_filename='/mnt/data/qbwang/lavis/data', top_k=3,
                  max_input_size=4096, num_output=2048, max_chunk_overlap=0.5, chunk_size_limit=1024):
-
+        print(output_filename)
         tokenizer = AutoTokenizer.from_pretrained('/mnt/data/qbwang/public/gtr-t5-large',  local_files_only=True, cache_dir="../public")
         model = AutoModel.from_pretrained('/mnt/data/qbwang/public/gtr-t5-large',  local_files_only=True, cache_dir="../public")
 
@@ -301,13 +284,8 @@ class BaseDataset(Dataset):
                 text.append(response.source_nodes[i].node.text)
                 score.append(response.source_nodes[i].score)
             # self.annotation[idx]['passages'] = text[0]
-
-            # results[item['question_id']] = text[0] + "#" + text[1] + "#" + text[2]
-            passenges_buf=''
-            for passenge in text:
-                passenges_buf += (passenge + "#")
-            results[item['question_id']] = passenges_buf[:-1]
-            print(results[item['question_id']])
+  
+            results[item['question_id']] = text[0] + "#" + text[1] + "#" + text[2]
 
         # print(response.source_nodes[0].node.text)
 
@@ -318,7 +296,7 @@ class BaseDataset(Dataset):
         #     'scores': score
         # }
         # results.append(result)
-        output_filename = "evalRetriever10.json" #_que+imgdes trainRetriever10
+        output_filename = "EvalRetrieveKnowledge.json"
 
         # a = json.load(open(output_filename, "r"))
         # print(a)
@@ -327,60 +305,6 @@ class BaseDataset(Dataset):
         with open(output_filename, 'w', encoding='utf-8') as output_file:
             json.dump(results, output_file)#, indent=4, ensure_ascii=False)
         exit()
-
-
-
-    def obtain_experience_data(self, annotation, relate_qustion_annotation, relate_answer_annotation):
-        print("obtain_experience_data")
-        results = {}
-
-        image_list = [str(int(item['image'].split('_')[-1].split('.')[0])) for item in annotation]
-        print(len(image_list))
-
-        truth_answers = {}#EasyDict()
-        for item in relate_answer_annotation['annotations']:
-            truth_answers[item['question_id']] = [answer['answer'] for answer in item['answers']]
-
-
-        for question in relate_qustion_annotation['questions']:
-            if str(question['image_id']) in image_list:
-                buf = question['question'] + ' '
-                for answer in list(set(truth_answers[question['question_id']])):
-                    buf += (answer + '#')
-                buf = buf[:-1]
-                if question['image_id'] not in results.keys():
-                    results[question['image_id']] = [buf]
-                else:
-                    results[question['image_id']].append(buf)
-                
-        print(len(results))
-        # print(count)
-
-        with open('eval_experience_vqav2.json', 'w', encoding='utf-8') as output_file:
-            json.dump(results, output_file)#, indent=4, ensure_ascii=False)
-
-        # print(image_list)
-        exit()
-
-        # for idx, item in tqdm(enumerate(annotation)):
-
-        #     item['question_id']     #item['question']
-        
-
-        #     for question in relate_qustion_annotation['questions']:
-        #         if  question[] in item['question_id']:
-                
-        #         item['image_id'] in ['image_id']:
-        #             image_id = relate_qustion_annotation['questions']['image_id']
-        #             for :
-        #                 relate_qustion_annotation['question_id']['']
-
-        #     text = []
-        #     score = []
-
-        #     for i in range(len(response.source_nodes)):
-
-
 
 
 class ConcatDataset(ConcatDataset):

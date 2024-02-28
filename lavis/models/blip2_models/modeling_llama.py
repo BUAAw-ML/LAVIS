@@ -31,7 +31,7 @@ from transformers.modeling_outputs import BaseModelOutputWithPast, CausalLMOutpu
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from transformers.models.llama.configuration_llama import LlamaConfig
-
+import torch.nn.functional as F
 
 logger = logging.get_logger(__name__)
 
@@ -206,6 +206,7 @@ class LlamaAttention(nn.Module):
 
         if past_key_value is not None:
             # reuse k, v, self_attention
+
             key_states = torch.cat([past_key_value[0], key_states], dim=2)
             value_states = torch.cat([past_key_value[1], value_states], dim=2)
 
@@ -500,6 +501,17 @@ class LlamaModel(LlamaPreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        # if input_ids is not None:
+        #     print(input_ids.shape)
+        #     print("input_ids is not None")
+        # elif inputs_embeds is not None:
+        #     print(inputs_embeds.shape)
+        #     print("inputs_embeds is not None")
+        # elif input_ids is None and inputs_embeds is None:
+        #     print("input_ids is None and inputs_embeds is None")
+
+
+
         # retrieve input_ids and inputs_embeds
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
@@ -527,7 +539,11 @@ class LlamaModel(LlamaPreTrainedModel):
             position_ids = position_ids.view(-1, seq_length).long()
 
         if inputs_embeds is None:
+            
+            input_ids[input_ids < 2] = 2
+
             inputs_embeds = self.embed_tokens(input_ids)
+
         # embed positions
         if attention_mask is None:
             attention_mask = torch.ones(
@@ -685,6 +701,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
+
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -699,23 +716,97 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
 
         hidden_states = outputs[0]
         logits = self.lm_head(hidden_states)
-
         loss = None
+
+        #############
+        loss_labels2 = []
+
         if labels is not None:
+            # print(labels.shape)
             # Shift so that tokens < n predict n
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
+            # print(shift_labels.shape)
+            # print(shift_logits.shape)
+
+            
+            ################calculate knowledge usefulness judgement loss##############
+
+
+            # loss_fct = CrossEntropyLoss(reduction='mean')
+            # loss_buf = []
+            # for i in range(4):
+            #     loss_buf.append(loss_fct(shift_logits[i], shift_labels[i]))
+            
+            # loss_buf = torch.Tensor(loss_buf)
+            # print(loss_buf)
+            # loss_labels = ((loss_buf[:3])< loss_buf[3]) # + 0.5
+
+            probs = nn.functional.softmax(shift_logits, dim=-1)
+            token_prediction = torch.argmax(probs, dim=-1)
+            token_prediction[shift_labels == -100] = -100
+            #这块检查下
+
+            loss_labels2 = ((token_prediction == shift_labels).sum(-1) == token_prediction.shape[-1]) #[:4] # 4 L+3
+            # loss_labels2 = loss_labels
+            # loss_labels = loss_labels[:3]
+
+            # loss_labels &= loss_labels2.to(loss_labels.device)
+
+            
+            # for i in range(3):
+            #     if loss_labels[i]:
+            #         label_buf = shift_labels[i+4]
+                    
+            #         label_buf[label_buf==694] = 4874
+                    
+            #         shift_labels[i+4] = label_buf  #no: 694  yes: 4874   useful: 5407 useless: 19315
+
+            # print(shift_labels)
+            # loss = F.binary_cross_entropy(shift_logits, shift_labels, reduction='none') #mean
+            # print(loss.shape)[]
+            # print(loss)
+            # exit()
+
+            ######################################
+
             # Flatten the tokens
-            loss_fct = CrossEntropyLoss(reduction=reduction)
+            loss_fct = CrossEntropyLoss(reduction=reduction)#reduction
+
             shift_logits = shift_logits.view(-1, self.config.vocab_size)
             shift_labels = shift_labels.view(-1)
             # Enable model parallelism
             shift_labels = shift_labels.to(shift_logits.device)
+           
             loss = loss_fct(shift_logits, shift_labels)
+
             if reduction == "none":
-                # loss = loss.view(logits.size(0), -1).sum(1)
                 loss = loss.view(logits.size(0), -1).mean(1)
 
+            #################################
+            # loss_mask = (loss_labels2[3].unsqueeze(-1) ==  loss_labels2[:3])
+            # # print(loss_mask)
+            # update_loss = loss[4:].masked_fill_(loss_mask, 0.0)
+            # # print(update_loss)
+            # loss = torch.cat([loss[:4], update_loss], dim=-1)
+ 
+            # # if loss_labels.int().sum() == 0 or loss_labels.int().sum() == 3:
+            # #     loss[4:] = 0
+
+            # # if not loss_labels2[3]:
+            # #     loss[4:] = 0
+            # # loss[4:] = 0
+            # # for i in range(3):
+            # #     if not loss_labels[i]:
+            # #         loss[i] = 0
+
+            # print(loss)
+
+            # loss[:3] = 0
+            # loss[4:] = 0
+            #################################
+
+        
         if not return_dict:
             output = (logits,) + outputs[1:]
             return (loss,) + output if loss is not None else output
@@ -725,7 +816,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            attentions=loss_labels2, #outputs.attentions,
         )
 
     def prepare_inputs_for_generation(
@@ -855,6 +946,7 @@ class LlamaForSequenceClassification(LlamaPreTrainedModel):
         loss = None
         if labels is not None:
             labels = labels.to(logits.device)
+
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"

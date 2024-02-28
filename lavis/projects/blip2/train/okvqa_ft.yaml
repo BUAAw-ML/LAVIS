@@ -4,7 +4,7 @@
  # For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
 
 model:
-  arch: blip2_vicuna_instruct
+  arch: blip2_vicuna_instruct #blip2_t5_okvqa #
 
   model_type: okvqa
   load_finetuned: False
@@ -57,7 +57,7 @@ datasets:
   #       name: "blip_question"
 
 run:
-  task: vqa
+  task: vqa #aok_vqa #
   runner: runner_iter
   # optimization-specific
   # optimizer
@@ -76,13 +76,13 @@ run:
   warmup_lr: 1e-8
   warmup_steps: 1000
   weight_decay: 0.05
-  max_iters: 10000
-  iters_per_inner_epoch: 2000
-  max_epoch: 3
-  batch_size_train: 8
-  batch_size_eval: 8
+  max_iters: 8000 #0 #100000 #
+  iters_per_inner_epoch: 8000 #80 #00 #2000  9009 17056
+  max_epoch: 1 #3
+  batch_size_train: 1
+  batch_size_eval: 1
   num_workers: 4
-  accum_grad_iters: 1
+  accum_grad_iters: 8
 
 #  train_dataset_ratios:
 #    ok_vqa: 0.5

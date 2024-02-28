@@ -15,9 +15,8 @@ from lavis.common.registry import registry
 from lavis.models.blip2_models.blip2 import Blip2Base, disabled_train
 from lavis.models.blip2_models.modeling_t5 import T5Config, T5ForConditionalGeneration
 
-from lavis.common.registry import registry
 
-@registry.register_model("blip2_t5_okvqa")
+@registry.register_model("blip2_t5")
 class Blip2T5(Blip2Base):
     """
     BLIP2 T5 model.
@@ -36,7 +35,6 @@ class Blip2T5(Blip2Base):
         "pretrain_flant5xl_vitL": "configs/models/blip2/blip2_pretrain_flant5xl_vitL.yaml",
         "pretrain_flant5xxl": "configs/models/blip2/blip2_pretrain_flant5xxl.yaml",
         "caption_coco_flant5xl": "configs/models/blip2/blip2_caption_flant5xl.yaml",
-        "okvqa": "configs/models/blip2/blip2_pretrain_flant5xl.yaml"
     }
 
     def __init__(
@@ -48,7 +46,7 @@ class Blip2T5(Blip2Base):
         vit_precision="fp16",
         freeze_vit=True,
         num_query_token=32,
-        t5_model="google/flan-t5-xl", #
+        t5_model="google/flan-t5-xl",
         prompt="",
         max_txt_len=32,
         apply_lemmatizer=False,
@@ -102,6 +100,37 @@ class Blip2T5(Blip2Base):
         self._lemmatizer = None
 
     def forward(self, samples):
+
+        ##############update input###############
+        # print(samples)
+
+        samples["image"] = samples["image"].expand(7, -1, -1, -1)
+        samples["text_input"] = samples["text_input"] * 4
+        samples["passages"] = samples["passages"][0].split("#")[:3]
+
+        samples["answer"] = samples["answer"] * 4
+        samples["gold_answer"] = samples["gold_answer"] * 4
+        # samples["weight"] = samples["weight"].expand(16)
+        # samples["n_answers"] = samples["n_answers"].expand(16)
+
+        # print("!!!!!!!!!!!!!!!!!")
+        # print(samples)
+        text_input_buf = []
+        for i in range(len(samples["text_input"])-1):
+            # samples["text_input"][i] =  samples["text_input"][i] + 'Reference knowledge:' +samples["passages"][i]
+            text_input_buf.append('[Question Answer Task] Context: ' + samples["passages"][i][:500] + ' Question: ' +samples["text_input"][i] + ' Answer the question: ')
+
+        text_input_buf.append('[Question Answer Task] Question: ' +samples["text_input"][3] + ' Answer the question: ')
+        for i in range(len(samples["text_input"])-1):
+            text_input_buf.append('[Classification Task] Context: ' + samples["passages"][i][:500] + ' Question: ' + samples["text_input"][i] + ' Answer whether the context is helpful for answering the question:')
+        
+        samples["text_input"] = text_input_buf
+
+        # print(samples["text_input"])
+
+
+        ##########################################
+
         image = samples["image"]
 
         with self.maybe_autocast():
@@ -111,15 +140,46 @@ class Blip2T5(Blip2Base):
         )
 
         query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
+        # query_output = self.Qformer.bert(
+        #     query_embeds=query_tokens,
+        #     encoder_hidden_states=image_embeds,
+        #     encoder_attention_mask=image_atts,
+        #     return_dict=True,
+        # )
+###########################################
+        text_Qformer = self.tokenizer(
+            samples["text_input"],
+            padding='longest',
+            truncation=True,
+            max_length=self.max_txt_len,
+            return_tensors="pt",
+        ).to(image.device)
+        query_atts = torch.ones(query_tokens.size()[:-1], dtype=torch.long).to(image.device)
+        Qformer_atts = torch.cat([query_atts, text_Qformer.attention_mask], dim=1)
         query_output = self.Qformer.bert(
+            text_Qformer.input_ids,
+            attention_mask=Qformer_atts,
             query_embeds=query_tokens,
             encoder_hidden_states=image_embeds,
             encoder_attention_mask=image_atts,
             return_dict=True,
         )
 
+
         inputs_t5 = self.t5_proj(query_output.last_hidden_state)
         atts_t5 = torch.ones(inputs_t5.size()[:-1], dtype=torch.long).to(image.device)
+
+        #######################knowledge enhancement###################
+       
+        answers = []
+        for t in samples['answer']:
+            answers.append(t + self.llm_tokenizer.eos_token)
+
+        for t in range(len(samples["answer"])-1):
+            answers.append('no' + self.llm_tokenizer.eos_token)
+
+        #####################################
+
 
         with self.maybe_autocast(dtype=torch.bfloat16):
             input_tokens = self.t5_tokenizer(
@@ -130,7 +190,8 @@ class Blip2T5(Blip2Base):
                 return_tensors="pt",
             ).to(image.device)
             output_tokens = self.t5_tokenizer(
-                [t + self.t5_tokenizer.eos_token for t in samples['answer']], #samples["text_output"],
+#########################################################
+                answers, #samples["text_output"],
                 padding="longest",
                 truncation=True,
                 max_length=self.max_txt_len,
@@ -195,12 +256,31 @@ class Blip2T5(Blip2Base):
         )
 
         query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
+        # query_output = self.Qformer.bert(
+        #     query_embeds=query_tokens,
+        #     encoder_hidden_states=image_embeds,
+        #     encoder_attention_mask=image_atts,
+        #     return_dict=True,
+        # )
+###########################################
+        text_Qformer = self.tokenizer(
+                prompt,
+                padding='longest',
+                truncation=True,
+                max_length=self.max_txt_len,
+                return_tensors="pt",
+            ).to(image.device)
+        query_atts = torch.ones(query_tokens.size()[:-1], dtype=torch.long).to(image.device)
+        Qformer_atts = torch.cat([query_atts, text_Qformer.attention_mask], dim=1)
         query_output = self.Qformer.bert(
-            query_embeds=query_tokens,
-            encoder_hidden_states=image_embeds,
-            encoder_attention_mask=image_atts,
-            return_dict=True,
-        )
+                    text_Qformer.input_ids,
+                    attention_mask=Qformer_atts,
+                    query_embeds=query_tokens,
+                    encoder_hidden_states=image_embeds,
+                    encoder_attention_mask=image_atts,
+                    return_dict=True,
+                )
+
 
         inputs_t5 = self.t5_proj(query_output.last_hidden_state)
         atts_t5 = torch.ones(inputs_t5.size()[:-1], dtype=torch.long).to(image.device)
@@ -217,6 +297,24 @@ class Blip2T5(Blip2Base):
                 0
             ), "The number of prompts must be equal to the batch size."
 
+
+
+    #######################knowledge enhancement###################
+
+        knowledges = samples["passages"][0].split("#")[:3]
+
+        prompt1 = []
+        for i in range(len(knowledges)):
+            prompt1.append('[Question Answer Task] Context:' + knowledges[i][:500]+ ' '+ prompt[0]) #
+        prompt1.append('[Question Answer Task] ' + prompt[0])
+
+        for i in range(len(knowledges)):
+            prompt1.append('[Classification Task] Context: ' + knowledges[i][:500]+ ' '+ prompt[0][:-14] + ' Answer whether the context is helpful for answering the question:')
+
+        prompt = prompt1
+
+        #######################     
+        
         input_tokens = self.t5_tokenizer(
             prompt, padding="longest", return_tensors="pt"
         ).to(image.device)
