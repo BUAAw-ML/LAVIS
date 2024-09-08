@@ -14,8 +14,6 @@ import transformers
 from lavis.common.registry import registry
 from lavis.models.blip2_models.blip2 import Blip2Base, disabled_train
 
-from sentence_transformers import SentenceTransformer, util
-from transformers import AutoTokenizer, AutoModel
 import torch.nn.functional as F
 import math
 from easydict import EasyDict
@@ -135,12 +133,9 @@ class Blip2VicunaInstruct(Blip2Base):
             self.visual_encoder.train = disabled_train
             logging.info("freeze vision encoder")
         
-        self.Qformer, self.query_tokens = self.init_Qformer( #self.
+        self.Qformer, self.query_tokens = self.init_Qformer( 
             num_query_token, self.visual_encoder.num_features
         )
-
-        # self.query_tokens = torch.cat([query_tokens, query_tokens2], dim=1)
-        # print(self.query_tokens.shape)
 
         if not qformer_text_input:
             self.Qformer.bert.embeddings.word_embeddings = None
@@ -177,71 +172,40 @@ class Blip2VicunaInstruct(Blip2Base):
 
         self.max_txt_len = max_txt_len
         self.max_output_txt_len = max_output_txt_len
+
         self.prompt = prompt
-        # prompt_tokens = self.llm_tokenizer(self.prompt, return_tensors="pt")
-        # self.prompt_length = prompt_tokens.attention_mask.sum(1)
-
         self._lemmatizer = None
-
         self.qformer_text_input = qformer_text_input
 
-##########################
-        self.Qformer2, self.query_tokens2 = self.init_Qformer2( #self.Qformer2
+        self.Qformer2, self.query_tokens2 = self.init_Qformer2( 
             num_query_token, self.visual_encoder.num_features
         )
         self.Qformer2.resize_token_embeddings(len(self.tokenizer))
         self.Qformer2.cls = None
-
         self.llm_proj2 = nn.Linear(
             self.Qformer.config.hidden_size, self.llm_model.config.hidden_size
-            # self.Qformer.config.hidden_size, 768
         )
 
-        self.Qformer3, self.query_tokens3 = self.init_Qformer3( #self.Qformer2
+        self.Qformer3, self.query_tokens3 = self.init_Qformer3( 
             num_query_token, self.visual_encoder.num_features
         )
         self.Qformer3.resize_token_embeddings(len(self.tokenizer))
         self.Qformer3.cls = None
         self.llm_proj3 = nn.Linear(
             self.Qformer.config.hidden_size, self.llm_model.config.hidden_size
-            # self.Qformer.config.hidden_size, 768
         )
 
-
-        self.Qformer4, self.query_tokens4 = self.init_Qformer4( #self.Qformer2
-            num_query_token, self.visual_encoder.num_features
-        )
-        self.Qformer4.resize_token_embeddings(len(self.tokenizer))
-        self.Qformer4.cls = None
-        self.llm_proj4 = nn.Linear(
-            self.Qformer.config.hidden_size, self.llm_model.config.hidden_size
-            # self.Qformer.config.hidden_size, 768
-        )
-
-        self.context_len = 100
-        self.min_passages_len = 20
+        self.context_len =1000
+        self.min_passages_len = 10
         self.input_num = 4
+        self.knowledge_num = self.input_num - 1
 
-        self.sim_func = MultiHeadedSimilarity(32, 4096) #torch.nn.CosineSimilarity() DotProductSimilarity() #
-        # self.Qformer2.resize_token_embeddings(len(self.tokenizer))
-        # self.Qformer2.cls = None
+        self.sim_func = MultiHeadedSimilarity(32, 4096) #torch.nn.CosineSimilarity()    DotProductSimilarity()#
 
-        # self.knowledge_tokenizer  = AutoTokenizer.from_pretrained('/mnt/data/qbwang/public/clip-ViT-L-14/0_CLIPModel')
-        # self.knowledge_SentenceTransformer = SentenceTransformer('/mnt/data/qbwang/public/clip-ViT-L-14')
-        # self.knowledge_encoder = transformers.CLIPModel.from_pretrained('/mnt/data/qbwang/public/clip-ViT-L-14/0_CLIPModel').text_model
-
-        # for name, param in self.knowledge_encoder.named_parameters():
-        #     param.requires_grad = False
-        # self.knowledge_encoder = self.knowledge_encoder.eval()
-        # self.knowledge_encoder.train = disabled_train
-        # logging.info("freeze knowledge encoder")
-
-        # self.weight = nn.Parameter(torch.Tensor(1, 2))
-        # torch.nn.init.xavier_uniform_(self.weight)
         self.weight1_proj1 = nn.Linear(
             self.llm_model.config.hidden_size, 200
         )
-        self.activate = torch.nn.Tanh()#.Tanh() #ReLU()#Tanh()#
+        
         self.weight1_proj2 = nn.Linear(
             200, 1
         )
@@ -254,16 +218,9 @@ class Blip2VicunaInstruct(Blip2Base):
             200, 1
         )
 
-        self.weight3_proj1 = nn.Linear(
-            self.llm_model.config.hidden_size, 200
-        )
+        self.activate = torch.nn.Tanh()   #ReLU()#Tanh()#
 
-        self.weight3_proj2 = nn.Linear(
-            200, 1
-        )
-
-
-
+        
     def concat_text_input_output(self, input_ids, input_atts, output_ids, output_atts):
         input_part_targets_len = []
         llm_tokens = {"input_ids": [], "attention_mask": []}
@@ -290,32 +247,21 @@ class Blip2VicunaInstruct(Blip2Base):
 
 
     def forward(self, samples):
-        print('-----------------')
-        print(samples["text_input"]) 
+        # print('-----------------')
+        # print(samples["text_input"]) 
         # print(samples["gold_answer"])
         # print(samples["text_output"])
+        # print(samples["experiences"])
         # print('-----------------')
         
         ##############update input###############
-        # print(samples["experiences"])
-
-
         samples["image"] = samples["image"].expand(self.input_num, -1, -1, -1)
         samples["text_input"] = samples["text_input"] * self.input_num
+ 
+        samples["passages"] = samples["passages"][0].split("#")
+        samples["passages"] = [item.split(",",maxsplit=1)[-1].strip("\"").strip(".") for item in samples["passages"] if len(item) > self.min_passages_len]  #if len(item) > self.min_passages_len
 
-        # text_input_origin = samples["text_input"] 
-        # samples["passages"] = re.split('#|\.|\"', samples["passages"][0]) #[:3]
-
-        samples["passages"] = samples["passages"][0].split("#") #[:3] #|
-        samples["passages"] = [item.split(",",maxsplit=1)[-1].strip("\"").strip(".") for item in samples["passages"] if len(item) > self.min_passages_len]
-        # samples["passages"] = [sentence.strip() for item in samples["passages"] for sentence in item.split(".") if len(sentence) > self.min_passages_len]
-        # print(samples["passages"])
-        # print(len(samples["passages"]))
-
-        samples["answer"] = samples["answer"] * self.input_num
         samples["gold_answer"] = samples["gold_answer"] * self.input_num
-        # samples["weight"] = samples["weight"].expand(16)
-        # samples["n_answers"] = samples["n_answers"].expand(16)
 
         ##########################################
 
@@ -327,11 +273,8 @@ class Blip2VicunaInstruct(Blip2Base):
         bs = image.size(0)
 
         query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1).to(image.device)
-
-#######################################
         query_tokens2 = self.query_tokens2.expand(image_embeds.shape[0], -1, -1).to(image.device)
         query_tokens3 = self.query_tokens3.expand(image_embeds.shape[0], -1, -1).to(image.device)
-        query_tokens4 = self.query_tokens4.expand(image_embeds.shape[0], -1, -1).to(image.device)
         
         if self.qformer_text_input:
             text_Qformer = self.tokenizer(
@@ -351,7 +294,6 @@ class Blip2VicunaInstruct(Blip2Base):
                 encoder_attention_mask=image_atts,
                 return_dict=True,
             )
-
         else:
             query_output = self.Qformer.bert(
                 query_embeds=query_tokens,
@@ -359,7 +301,6 @@ class Blip2VicunaInstruct(Blip2Base):
                 encoder_attention_mask=image_atts,
                 return_dict=True,
             )
-
         inputs_llm = self.llm_proj(query_output.last_hidden_state[:, :query_tokens.size(1), :])
         atts_llm = torch.ones(inputs_llm.size()[:-1], dtype=torch.long).to(image.device)
 
@@ -386,49 +327,8 @@ class Blip2VicunaInstruct(Blip2Base):
         inputs_llm = torch.cat([inputs_llm, inputs_llm2], dim=1)
         atts_llm = torch.cat([atts_llm, atts_llm2], dim=1)
 
-        ##########################
-        # print(samples["text_input"])
-        # print(samples["passages"])
-        text_Qformer4 = self.tokenizer(
-            samples["text_input"],
-            padding='longest',
-            truncation=True,
-            max_length=self.max_txt_len,
-            return_tensors="pt",
-        ).to(image.device)
-        query_atts4 = torch.ones(query_tokens4.size()[:-1], dtype=torch.long).to(image.device)
-        Qformer_atts4 = torch.cat([query_atts4, text_Qformer4.attention_mask], dim=1)
-        query_output4 = self.Qformer4.bert(
-            text_Qformer4.input_ids,
-            attention_mask=Qformer_atts4,
-            query_embeds=query_tokens4,
-            encoder_hidden_states=image_embeds,
-            encoder_attention_mask=image_atts,
-            return_dict=True,
-        )
-        inputs_llm4 = self.llm_proj4(query_output4.last_hidden_state[:, :query_tokens4.size(1), :])#.expand(self.input_num, -1, -1)
-
-        print([item for item in samples["experiences"][0]])
-        knowledge_tokens2 = self.llm_tokenizer(
-            [item for item in samples["experiences"][0]], 
-            padding="longest",
-            return_tensors="pt"
-        ).to(image.device)
-        knowledge_embeds2 = self.llm_model.get_input_embeddings()(knowledge_tokens2.input_ids)#.mean(-2)
-        knowledge_embeds2 = (knowledge_embeds2 * knowledge_tokens2['attention_mask'].unsqueeze(-1))#.sum(-2) 
-        question_qformer_embeds2 = inputs_llm4[0,:,:].mean(-2).unsqueeze(-2).expand(knowledge_embeds2.shape[0], -1, -1)#.detach()
-        sim_score2 = self.sim_func(question_qformer_embeds2, knowledge_embeds2)
-        mean_sim_score2 = (sim_score2 * knowledge_tokens2['attention_mask'].unsqueeze(-1)).mean(-1).sum(-1) / knowledge_tokens2['attention_mask'].sum(-1) #sim_score.max(-1)[0]
-        knowledge_scores_sigmoid2 = F.sigmoid(mean_sim_score2)
-        relevate_knowledge_ind2 = (knowledge_scores_sigmoid2).topk(3)[1]
-        relevate_knowledge_scores2 = (knowledge_scores_sigmoid2).topk(3)[0]
-        att_score2 = F.softmax(sim_score2.index_select(0,relevate_knowledge_ind2).masked_fill_((1 - knowledge_tokens2['attention_mask'].index_select(0,relevate_knowledge_ind2).unsqueeze(-1)).bool(), -9999.9)  , dim=-2)
-        knowledge_embeds_final2 = (att_score2.unsqueeze(-1) * knowledge_embeds2.index_select(0,relevate_knowledge_ind2).unsqueeze(2)).sum(1)
-        knowledge_embeds_final2 = (knowledge_embeds_final2[0].unsqueeze(0)).expand(3,-1,-1)
-
-        ########
         text_Qformer3 = self.tokenizer(
-            [samples["text_input"][0]+' '+ samples["experiences"][0][relevate_knowledge_ind2[0]]] * 4,
+            samples["text_input"], 
             padding='longest',
             truncation=True,
             max_length=self.max_txt_len,
@@ -445,55 +345,30 @@ class Blip2VicunaInstruct(Blip2Base):
             return_dict=True,
         )
         inputs_llm3 = self.llm_proj3(query_output3.last_hidden_state[:, :query_tokens3.size(1), :])
-        # atts_llm3= torch.ones(inputs_llm3.size()[:-1], dtype=torch.long).to(image.device)
-        # inputs_llm = torch.cat([inputs_llm, inputs_llm3], dim=1)
-        # atts_llm = torch.cat([atts_llm, atts_llm3], dim=1)
-
+ 
         knowledge_tokens = self.llm_tokenizer(
             [item[:self.context_len] for item in samples["passages"]], 
             padding="longest",
             return_tensors="pt"
         ).to(image.device)
 
-        knowledge_embeds = self.llm_model.get_input_embeddings()(knowledge_tokens.input_ids)#.mean(-2)
-        #这句话其实可以删掉
-        # knowledge_embeds = (knowledge_embeds * knowledge_tokens['attention_mask'].unsqueeze(-1))#.sum(-2) 
-        # knowledge_embeds = knowledge_embeds /  knowledge_tokens['attention_mask'].sum(-1).unsqueeze(-1)
-        # sim_score = (sim_score * )
-
+        knowledge_embeds = self.llm_model.get_input_embeddings()(knowledge_tokens.input_ids)
         question_qformer_embeds = inputs_llm3[0,:,:].mean(-2).unsqueeze(-2).expand(knowledge_embeds.shape[0], -1, -1)#.detach()
         
         sim_score = self.sim_func(question_qformer_embeds, knowledge_embeds)
-        # print(sim_score.shape)
-        mean_sim_score = (sim_score * knowledge_tokens['attention_mask'].unsqueeze(-1)).mean(-1).sum(-1) / knowledge_tokens['attention_mask'].sum(-1) #sim_score.max(-1)[0]
-        # print(mean_sim_score.shape)
+        mean_sim_score = (sim_score * knowledge_tokens['attention_mask'].unsqueeze(-1)).mean(-1).sum(-1) / knowledge_tokens['attention_mask'].sum(-1) 
         knowledge_scores_sigmoid = F.sigmoid(mean_sim_score)
-        relevate_knowledge_ind = (knowledge_scores_sigmoid).topk(3)[1]
-        relevate_knowledge_scores = (knowledge_scores_sigmoid).topk(3)[0]
-        # print(relevate_knowledge_ind)
-        # print(relevate_knowledge_scores)
+        relevate_knowledge_ind = (knowledge_scores_sigmoid).topk(self.knowledge_num )[1]
+        relevate_knowledge_scores = (knowledge_scores_sigmoid).topk(self.knowledge_num )[0]
 
-        #att_score应该改成先求平均了再用 #确认下是否有32维sim_score
         att_score = F.softmax(sim_score.index_select(0,relevate_knowledge_ind).masked_fill_((1- knowledge_tokens['attention_mask'].index_select(0,relevate_knowledge_ind).unsqueeze(-1)).bool(), -9999.9), dim=-2)
-        # print(att_score)
-        # print(att_score.shape)
         knowledge_embeds_final = (att_score.unsqueeze(-1) * knowledge_embeds.index_select(0,relevate_knowledge_ind).unsqueeze(2)).sum(1) #3 L 32 1 * 3 L 1 4096
-        
-        
-
-
-        ##########################################################################
-
 
         text_input_buf = []
-        for i in range(3):
-            # text_input_buf.append('Context: ' + samples["passages"][relevate_knowledge_ind[i]][:self.context_len] + '. Question: ' +samples["text_input"][i] + ' Short answer:') #  referring to Reference # (referring to Context if Context is useful)
+        for i in range(self.input_num):
             text_input_buf.append('Question: ' +samples["text_input"][i] + ' Short answer:')
-
-        text_input_buf.append('Question: ' +samples["text_input"][3] + ' Short answer:')
         
         samples["text_input"] = text_input_buf
-        # print(samples["text_input"])
 
         self.llm_tokenizer.padding_side = "right"
         self.llm_tokenizer.truncation_side = 'left'
@@ -509,14 +384,12 @@ class Blip2VicunaInstruct(Blip2Base):
         self.llm_tokenizer.truncation_side = 'right'
 
         text_output_tokens = self.llm_tokenizer(
-            [t + self.llm_tokenizer.eos_token for t in samples['answer']],
+            [t + self.llm_tokenizer.eos_token for t in samples['gold_answer']],
             return_tensors="pt",
             padding="longest",
             truncation=True,
             max_length=self.max_output_txt_len,
         ).to(image.device)
-
-        # print(text_input_tokens.input_ids)
 
         llm_tokens, input_part_targets_len = self.concat_text_input_output(
             text_input_tokens.input_ids,
@@ -529,8 +402,6 @@ class Blip2VicunaInstruct(Blip2Base):
         targets = llm_tokens['input_ids'].masked_fill(
             llm_tokens['input_ids'] == self.llm_tokenizer.pad_token_id, -100
         )
-
-        
 
         # do not apply loss to the text input (i.e., instruction)
         for i, l in enumerate(input_part_targets_len):
@@ -546,33 +417,18 @@ class Blip2VicunaInstruct(Blip2Base):
 
         inputs_embeds = self.llm_model.get_input_embeddings()(llm_tokens['input_ids'])
 
+        #######################################concate ###############################################
 
-       
-######################################################
-        # a = torch.cat([empty_targets[:3,:], targets[:3,:]], dim=1)
-        # b = torch.cat([targets[3,:].unsqueeze(0),empty_targets[3,:].unsqueeze(0)],dim=1)
-        # targets = torch.cat([a, b], dim=0)
-        # pad_embeds = self.llm_model.get_input_embeddings()(torch.tensor([self.llm_tokenizer.pad_token_id] * 32).to(image.device))
-        # pad_att = torch.zeros([1,32], dtype=torch.long).to(image.device)
-        # inputs_embeds1 = torch.cat([torch.cat([inputs_llm[:3,:32,:], knowledge_embeds2], dim=1), inputs_embeds[:3,:,:]], dim=1)
-        # attention_mask1 = torch.cat([torch.cat([atts_llm[:3,:32], atts_llm[:3,:32]], dim=1),  llm_tokens['attention_mask'][:3,:]], dim=1)
-        # inputs_embeds2 = torch.cat([torch.cat([inputs_llm[3,32:64,:].unsqueeze(0), inputs_embeds[3,:,:].unsqueeze(0)], dim=1),pad_embeds.unsqueeze(0)], dim=1)
-        # attention_mask2 = torch.cat([torch.cat([atts_llm[3,32:64].unsqueeze(0), llm_tokens['attention_mask'][3,:].unsqueeze(0)], dim=1),pad_att], dim=1)
+        w = F.softmax(torch.cat([self.weight1_proj2(self.activate(self.weight1_proj1(inputs_llm[:self.knowledge_num ,:32,:]))),self.weight2_proj2(self.activate(self.weight2_proj1(knowledge_embeds_final)))], dim=-1), dim=-1) 
+        c = w[:,:,0].unsqueeze(-1) * inputs_llm[:self.knowledge_num ,:32,:] + w[:,:,1].unsqueeze(-1) * knowledge_embeds_final
 
-        # a = F.softmax(self.weight)[0][0].unsqueeze(-1).unsqueeze(-1) 
-        # b = F.softmax(self.weight)[0][1].unsqueeze(-1).unsqueeze(-1) 
-        # c = 9 * inputs_llm[:3,:32,:] + 1 * knowledge_embeds2
-
-        w = F.softmax(torch.cat([self.weight1_proj2(self.activate(self.weight1_proj1(inputs_llm[:3,:32,:]))),self.weight2_proj2(self.activate(self.weight2_proj1(knowledge_embeds_final))),self.weight3_proj2(self.activate(self.weight3_proj1(knowledge_embeds_final2)))], dim=-1), dim=-1)
-        print(w)
-        c = w[:,:,0].unsqueeze(-1) * inputs_llm[:3,:32,:] + w[:,:,1].unsqueeze(-1) * knowledge_embeds_final  + w[:,:,2].unsqueeze(-1) * knowledge_embeds_final2
-
-        inputs_embeds1 = torch.cat([c, inputs_embeds[:3,:,:]], dim=1)
-        attention_mask1 = torch.cat([atts_llm[:3,:32], llm_tokens['attention_mask'][:3,:]], dim=1)
-        inputs_embeds2 = torch.cat([inputs_llm[3,32:64,:].unsqueeze(0), inputs_embeds[3,:,:].unsqueeze(0)], dim=1)
-        attention_mask2 = torch.cat([atts_llm[3,32:64].unsqueeze(0), llm_tokens['attention_mask'][3,:].unsqueeze(0)], dim=1)
+        inputs_embeds1 = torch.cat([c, inputs_embeds[:self.knowledge_num ,:,:]], dim=1)
+        attention_mask1 = torch.cat([atts_llm[:self.knowledge_num,:32], llm_tokens['attention_mask'][:self.knowledge_num,:]], dim=1)
+        inputs_embeds2 = torch.cat([inputs_llm[self.knowledge_num,32:64,:].unsqueeze(0), inputs_embeds[self.knowledge_num,:,:].unsqueeze(0)], dim=1)
+        attention_mask2 = torch.cat([atts_llm[self.knowledge_num,32:64].unsqueeze(0), llm_tokens['attention_mask'][self.knowledge_num,:].unsqueeze(0)], dim=1)
         inputs_embeds = torch.cat([inputs_embeds1, inputs_embeds2], dim=0)
         attention_mask = torch.cat([attention_mask1, attention_mask2], dim=0)
+        ###########################################################################################
 
         with self.maybe_autocast():
             outputs = self.llm_model(
@@ -583,33 +439,21 @@ class Blip2VicunaInstruct(Blip2Base):
                 reduction="none",
             )
 
-
-###################################knowledge sim cal###############################
-
+        ###################################knowledge sim cal###############################
         loss_labels2 = outputs.attentions
-        # ignore_mask = torch.tensor([False, False, False]).to(loss_labels2.device)
-        # if not loss_labels2[3]:
-        ignore_mask = (loss_labels2[3].unsqueeze(-1) ==  loss_labels2[:3])
-        print(loss_labels2)
+        ignore_mask = (loss_labels2[self.knowledge_num].unsqueeze(-1) == loss_labels2[:self.knowledge_num])
 
-        knowledge_loss = F.binary_cross_entropy(relevate_knowledge_scores, loss_labels2[:3].float(), reduction='none')
-
+        knowledge_loss = F.binary_cross_entropy(relevate_knowledge_scores, loss_labels2[:self.knowledge_num].float(), reduction='none')
         knowledge_loss.masked_fill_(ignore_mask, 0.0)  
-        print(knowledge_loss)
+
         outputs.loss = torch.cat([outputs.loss,knowledge_loss],dim=-1)
-        # outputs.loss[4:] = 0
-        # print(outputs.loss)
+        ####################################################
 
-# ###################################################
-        # print((outputs.loss > 0).sum())
         loss = outputs.loss.sum() / (outputs.loss > 0).sum()
-
-        # if knowledge_labels[:-1].int().sum() == 0 or knowledge_labels[:-1].int().sum() == 3:
-        #     loss *= 0
-
-        # loss = outputs.loss[knowledge_labels].mean() #+ knowledge_loss  #[idx] [knowledge_labels]
  
-        return {"loss": loss} #loss
+        return {"loss": loss}
+
+
 
     @torch.no_grad()
     def generate(
@@ -626,7 +470,6 @@ class Blip2VicunaInstruct(Blip2Base):
             temperature=1,
     ):
 
-        print('-----------------')
         self.llm_tokenizer.padding_side = "left"
 
         if "prompt" in samples.keys():
@@ -648,20 +491,12 @@ class Blip2VicunaInstruct(Blip2Base):
             prompt = [p.format(', '.join(samples['ocr_tokens'][i][:30])) for i, p in enumerate(prompt)]
 
 
-#####################################
-        print(samples["passages"])
-        samples["passages"] = samples["passages"][0].split("#") #[:3] #|
-        samples["passages"] = [item.split(",",maxsplit=1)[-1].strip("\"").strip(".") for item in samples["passages"] if len(item) > self.min_passages_len]
-        # samples["passages"] = [sentence.strip() for item in samples["passages"] for sentence in item.split(".") if len(sentence) > self.min_passages_len]
-        print(samples["passages"])
-        print(len(samples["passages"]))
-
-
+        samples["passages"] = samples["passages"][0].split("#") 
+        samples["passages"] = [item.split(",",maxsplit=1)[-1].strip("\"").strip(".") for item in samples["passages"] if len(item) > self.min_passages_len] 
+        
         query_tokens = self.query_tokens.expand(bs, -1, -1).to(image.device)
-#######################################
         query_tokens2 = self.query_tokens2.expand(bs, -1, -1).to(image.device)
         query_tokens3 = self.query_tokens3.expand(bs, -1, -1).to(image.device)
-        query_tokens4 = self.query_tokens4.expand(bs, -1, -1).to(image.device)
 
         if self.qformer_text_input:
             # remove ocr tokens in q_former (for eval textvqa)
@@ -757,45 +592,8 @@ class Blip2VicunaInstruct(Blip2Base):
         inputs_llm = torch.cat([inputs_llm, inputs_llm2], dim=1)
         atts_llm = torch.cat([atts_llm, atts_llm2], dim=1)
 
-        ##########################
-        text_Qformer4 = self.tokenizer(
-            samples["text_input"], #samples["text_input"],
-            padding='longest',
-            truncation=True,
-            max_length=self.max_txt_len,
-            return_tensors="pt",
-        ).to(image.device)
-        query_atts4 = torch.ones(query_tokens4.size()[:-1], dtype=torch.long).to(image.device)
-        Qformer_atts4 = torch.cat([query_atts4, text_Qformer4.attention_mask], dim=1)
-        query_output4 = self.Qformer4.bert(
-            text_Qformer4.input_ids,
-            attention_mask=Qformer_atts4,
-            query_embeds=query_tokens4,
-            encoder_hidden_states=image_embeds,
-            encoder_attention_mask=image_atts,
-            return_dict=True,
-        )
-        inputs_llm4 = self.llm_proj4(query_output4.last_hidden_state[:, :query_tokens4.size(1), :])#.expand(self.input_num, -1, -1)
-        knowledge_tokens2 = self.llm_tokenizer(
-            [item for item in samples["experiences"][0]], 
-            padding="longest",
-            return_tensors="pt"
-        ).to(image.device)
-        knowledge_embeds2 = self.llm_model.get_input_embeddings()(knowledge_tokens2.input_ids)#.mean(-2)
-        knowledge_embeds2 = (knowledge_embeds2 * knowledge_tokens2['attention_mask'].unsqueeze(-1))#.sum(-2) 
-        question_qformer_embeds2 = inputs_llm4[0,:,:].mean(-2).unsqueeze(-2).expand(knowledge_embeds2.shape[0], -1, -1)#.detach()
-        sim_score2 = self.sim_func(question_qformer_embeds2, knowledge_embeds2)
-        mean_sim_score2 = (sim_score2 * knowledge_tokens2['attention_mask'].unsqueeze(-1)).mean(-1).sum(-1) / knowledge_tokens2['attention_mask'].sum(-1) #sim_score.max(-1)[0]
-        knowledge_scores_sigmoid2 = F.sigmoid(mean_sim_score2)
-        relevate_knowledge_ind2 = (knowledge_scores_sigmoid2).topk(3)[1]
-        relevate_knowledge_scores2 = (knowledge_scores_sigmoid2).topk(3)[0]
-        att_score2 = F.softmax(sim_score2.index_select(0,relevate_knowledge_ind2).masked_fill_((1 - knowledge_tokens2['attention_mask'].index_select(0,relevate_knowledge_ind2).unsqueeze(-1)).bool(), -9999.9)  , dim=-2)
-        knowledge_embeds_final2 = (att_score2.unsqueeze(-1) * knowledge_embeds2.index_select(0,relevate_knowledge_ind2).unsqueeze(2)).sum(1)
-        knowledge_embeds_final2 = (knowledge_embeds_final2[0].unsqueeze(0)).expand(3,-1,-1)
-
-        ########
         text_Qformer3 = self.tokenizer(
-            [samples["text_input"][0]+' '+ samples["experiences"][0][relevate_knowledge_ind2[0]]],
+            samples["text_input"],
             padding='longest',
             truncation=True,
             max_length=self.max_txt_len,
@@ -819,29 +617,21 @@ class Blip2VicunaInstruct(Blip2Base):
             return_tensors="pt"
         ).to(image.device)
 
-        knowledge_embeds = self.llm_model.get_input_embeddings()(knowledge_tokens.input_ids)#.mean(-2)
-        knowledge_embeds = (knowledge_embeds * knowledge_tokens['attention_mask'].unsqueeze(-1))#.sum(-2) 
+        knowledge_embeds = self.llm_model.get_input_embeddings()(knowledge_tokens.input_ids)
 
         question_qformer_embeds = inputs_llm3[0,:,:].mean(-2).unsqueeze(-2).expand(knowledge_embeds.shape[0], -1, -1)#.detach()
         sim_score = self.sim_func(question_qformer_embeds, knowledge_embeds)
         mean_sim_score = (sim_score * knowledge_tokens['attention_mask'].unsqueeze(-1)).mean(-1).sum(-1) / knowledge_tokens['attention_mask'].sum(-1) #sim_score.max(-1)[0]
         knowledge_scores_sigmoid = F.sigmoid(mean_sim_score)
-        relevate_knowledge_ind = (knowledge_scores_sigmoid).topk(3)[1]
-        relevate_knowledge_scores = (knowledge_scores_sigmoid).topk(3)[0]
+        relevate_knowledge_ind = (knowledge_scores_sigmoid).topk(self.knowledge_num)[1]
+        relevate_knowledge_scores = (knowledge_scores_sigmoid).topk(self.knowledge_num)[0]
         att_score = F.softmax(sim_score.index_select(0,relevate_knowledge_ind).masked_fill_((1 - knowledge_tokens['attention_mask'].index_select(0,relevate_knowledge_ind).unsqueeze(-1)).bool(), -9999.9)  , dim=-2)
         knowledge_embeds_final = (att_score.unsqueeze(-1) * knowledge_embeds.index_select(0,relevate_knowledge_ind).unsqueeze(2)).sum(1)
-        
 
-
-
-    
         samples["text_input"] = samples["text_input"] * self.input_num
-
         text_input_buf = []
-        for i in range(3):
+        for i in range(self.input_num):   
             text_input_buf.append('Question: ' +samples["text_input"][i] + ' Short answer:')
-        text_input_buf.append('Question: ' +samples["text_input"][3] + ' Short answer:')
-               
         samples["text_input"] = text_input_buf
 
         ####################################################################        
@@ -856,24 +646,16 @@ class Blip2VicunaInstruct(Blip2Base):
 
             inputs_embeds = self.llm_model.get_input_embeddings()(llm_tokens.input_ids)
 
-###################################################################################
-            # pad_embeds = self.llm_model.get_input_embeddings()(torch.tensor([self.llm_tokenizer.pad_token_id] * 32).to(image.device))
-            # pad_att = torch.zeros([1,32], dtype=torch.long).to(image.device)
-            # inputs_embeds1 = torch.cat([torch.cat([inputs_llm[:3,:32,:], knowledge_embeds2], dim=1), inputs_embeds[:3,:,:]], dim=1)
-            # attention_mask1 = torch.cat([torch.cat([atts_llm[:3,:32], atts_llm[:3,:32]], dim=1),  llm_tokens['attention_mask'][:3,:]], dim=1)
-            # inputs_embeds2 = torch.cat([torch.cat([inputs_llm[3,32:64,:].unsqueeze(0), inputs_embeds[3,:,:].unsqueeze(0)], dim=1),pad_embeds.unsqueeze(0)], dim=1)
-            # attention_mask2 = torch.cat([torch.cat([atts_llm[3,32:64].unsqueeze(0), llm_tokens['attention_mask'][3,:].unsqueeze(0)], dim=1),pad_att], dim=1)
-            # a = F.softmax(self.weight)[0][0].unsqueeze(-1).unsqueeze(-1) 
-            # b = F.softmax(self.weight)[0][1].unsqueeze(-1).unsqueeze(-1) 
-            # c = 9 * inputs_llm[:3,:32,:] + 1 * knowledge_embeds2
-            # w = F.softmax(torch.cat([self.weight_proj(inputs_llm[:3,:32,:]),self.weight2_proj(knowledge_embeds2)], dim=-1), dim=-1)
-            w = F.softmax(torch.cat([self.weight1_proj2(self.activate(self.weight1_proj1(inputs_llm[:3,:32,:]))),self.weight2_proj2(self.activate(self.weight2_proj1(knowledge_embeds_final))),self.weight3_proj2(self.activate(self.weight3_proj1(knowledge_embeds_final2)))], dim=-1), dim=-1)
-            c = w[:,:,0].unsqueeze(-1) * inputs_llm[:3,:32,:] + w[:,:,1].unsqueeze(-1) * knowledge_embeds_final  + w[:,:,2].unsqueeze(-1) * knowledge_embeds_final2
+            ###########################################concate##############################################
+            w = F.softmax(torch.cat([self.weight1_proj2(self.activate(self.weight1_proj1(inputs_llm[:self.knowledge_num ,:32,:]))),self.weight2_proj2(self.activate(self.weight2_proj1(knowledge_embeds_final)))], dim=-1), dim=-1) 
+          
+            c = w[:,:,0].unsqueeze(-1) * inputs_llm[:self.knowledge_num ,:32,:] + w[:,:,1].unsqueeze(-1) * knowledge_embeds_final 
 
-            inputs_embeds1 = torch.cat([c, inputs_embeds[:3,:,:]], dim=1)
-            attention_mask1 = torch.cat([atts_llm[:3,:32], llm_tokens['attention_mask'][:3,:]], dim=1)
-            inputs_embeds2 = torch.cat([inputs_llm[3,32:64,:].unsqueeze(0), inputs_embeds[3,:,:].unsqueeze(0)], dim=1)
-            attention_mask2 = torch.cat([atts_llm[3,32:64].unsqueeze(0), llm_tokens['attention_mask'][3,:].unsqueeze(0)], dim=1)
+
+            inputs_embeds1 = torch.cat([c, inputs_embeds[:self.knowledge_num ,:,:]], dim=1)
+            attention_mask1 = torch.cat([atts_llm[:self.knowledge_num,:32], llm_tokens['attention_mask'][:self.knowledge_num,:]], dim=1)
+            inputs_embeds2 = torch.cat([inputs_llm[self.knowledge_num,32:64,:].unsqueeze(0), inputs_embeds[self.knowledge_num,:,:].unsqueeze(0)], dim=1)
+            attention_mask2 = torch.cat([atts_llm[self.knowledge_num,32:64].unsqueeze(0), llm_tokens['attention_mask'][self.knowledge_num,:].unsqueeze(0)], dim=1)
             inputs_embeds = torch.cat([inputs_embeds1, inputs_embeds2], dim=0)
             attention_mask = torch.cat([attention_mask1, attention_mask2], dim=0)
 
@@ -891,6 +673,7 @@ class Blip2VicunaInstruct(Blip2Base):
                 length_penalty=length_penalty,
                 num_return_sequences=num_captions,
             )
+            ##########################################################################################
 
         outputs[outputs == 0] = 2  # convert output id 0 to 2 (eos_token_id)
         outputs[outputs == -1] = 2
@@ -901,33 +684,17 @@ class Blip2VicunaInstruct(Blip2Base):
         output_text = [text.strip() for text in output_text]
 
         #######################determine output##########################
-        answer_dict = EasyDict()
-        answer_dict[output_text[3]] = 1.1
+        answer_dict = {}
+        answer_dict[output_text[self.knowledge_num]] = 1.1
         
-        print_sig = False
-        for i in range(3):
-        
-            # if knowledge_scores_sigmoid[i] > 0.5:
-                    
-            print_sig = True
-            
+        for i in range(self.knowledge_num ):
             if output_text[i] not in answer_dict.keys():
                 answer_dict[output_text[i]] = 1
             else:
                 answer_dict[output_text[i]] += 1
 
-        # if print_sig:
-        print(output_text)
-        # print(samples["text_input"])
-        # print(samples["passages"])
-        print(samples["answers_list"])
-        print(answer_dict)
-
         output_text = max(zip(answer_dict.values(), answer_dict.keys()))
         output_text = [output_text[1]]
-        
-        # output_text = [output_text[0]]
-        #################################################
 
         return output_text
 
@@ -1109,10 +876,6 @@ class Blip2VicunaInstruct(Blip2Base):
             length_penalty=0,
             **kwargs
     ):
-        
-        # for i in range(len(samples["text_input"])):
-        #     knowledges = samples["passages"][i].split("#")[:3]
-        #     samples["text_input"][i] = samples["text_input"][i]+"#"+knowledges[0]  #samples["passages"][i][0]
 
         if isinstance(samples["text_input"], str):
             samples["text_input"] = [samples["text_input"]]
@@ -1135,10 +898,6 @@ class Blip2VicunaInstruct(Blip2Base):
         else:
             text_input = samples["text_input"]
 
-        # text_input_new = []
-        # for i in range(len(text_input)):
-        #     text_input_new.append(samples["passages"][i][0]+"\n"+samples["passages"][i][1]+"\n"+text_input[i])
-        # samples["prompt"] = text_input_new
         samples["prompt"] = text_input
 
         output_text = self.generate(
@@ -1469,8 +1228,7 @@ class Blip2VicunaInstruct(Blip2Base):
         model.llm_proj2.load_state_dict(model.llm_proj.state_dict())
         model.Qformer3.load_state_dict(model.Qformer.state_dict())
         model.llm_proj3.load_state_dict(model.llm_proj.state_dict())
-        model.Qformer4.load_state_dict(model.Qformer.state_dict())
-        model.llm_proj4.load_state_dict(model.llm_proj.state_dict())
+
 
 
 
